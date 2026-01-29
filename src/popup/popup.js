@@ -252,7 +252,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       if (response && response.success) {
         btnAnkiConnect.classList.add('success');
-        showMessage(`Sent ${response.count} cards to Anki!`, 'success');
+        let message = `Sent ${response.count} cards to Anki!`;
+        if (response.skipped > 0) {
+          message += ` Skipped ${response.skipped} duplicates.`;
+        }
+        showMessage(message, 'success');
         setTimeout(() => btnAnkiConnect.classList.remove('success'), 2000);
       } else {
         btnAnkiConnect.classList.add('error');
