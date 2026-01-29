@@ -89,6 +89,10 @@ async function modelExists(modelName) {
   return models.includes(modelName);
 }
 
+async function canAddNotes(notes) {
+  return await ankiRequest('canAddNotes', { notes });
+}
+
 async function addNotes(notes) {
   return await ankiRequest('addNotes', { notes });
 }
@@ -182,10 +186,10 @@ async function handleSendToAnki(request) {
 
 async function sendQuizzesToAnki(quizzes, deckName) {
   const targetDeck = `${CONFIG.DEFAULT_PARENT_DECK}::${deckName} - Quiz`;
-  
+
   await createDeck(targetDeck);
   await ensureQuizModel();
-  
+
   const notes = quizzes.map(quiz => {
     const options = quiz.options || [];
     return {
@@ -211,19 +215,33 @@ async function sendQuizzesToAnki(quizzes, deckName) {
       tags: CONFIG.DEFAULT_TAGS
     };
   });
-  
-  const results = await addNotes(notes);
+
+  const canAddResults = await canAddNotes(notes);
+  const newNotes = notes.filter((_, index) => canAddResults[index]);
+  const skippedCount = notes.length - newNotes.length;
+
+  if (newNotes.length === 0) {
+    return { success: true, count: 0, skipped: skippedCount, total: notes.length, message: "All cards already exist in Anki" };
+  }
+
+  const results = await addNotes(newNotes);
   const successCount = results.filter(id => id !== null).length;
-  
-  return { success: true, count: successCount, total: notes.length };
+
+  return {
+    success: true,
+    count: successCount,
+    skipped: skippedCount,
+    total: notes.length,
+    message: skippedCount > 0 ? `Added ${successCount} new cards, skipped ${skippedCount} duplicates` : undefined
+  };
 }
 
 async function sendFlashcardsToAnki(flashcards, deckName) {
   const targetDeck = `${CONFIG.DEFAULT_PARENT_DECK}::${deckName} - Flashcard`;
-  
+
   await createDeck(targetDeck);
   await ensureFlashcardModel();
-  
+
   const notes = flashcards.map(card => ({
     deckName: targetDeck,
     modelName: "NotebookLM Flashcard",
@@ -233,30 +251,56 @@ async function sendFlashcardsToAnki(flashcards, deckName) {
     },
     tags: CONFIG.DEFAULT_TAGS
   }));
-  
-  const results = await addNotes(notes);
+
+  const canAddResults = await canAddNotes(notes);
+  const newNotes = notes.filter((_, index) => canAddResults[index]);
+  const skippedCount = notes.length - newNotes.length;
+
+  if (newNotes.length === 0) {
+    return { success: true, count: 0, skipped: skippedCount, total: notes.length, message: "All cards already exist in Anki" };
+  }
+
+  const results = await addNotes(newNotes);
   const successCount = results.filter(id => id !== null).length;
-  
-  return { success: true, count: successCount, total: notes.length };
+
+  return {
+    success: true,
+    count: successCount,
+    skipped: skippedCount,
+    total: notes.length,
+    message: skippedCount > 0 ? `Added ${successCount} new cards, skipped ${skippedCount} duplicates` : undefined
+  };
 }
 
 async function sendAllToAnki(data, deckName) {
   let totalSuccess = 0;
+  let totalSkipped = 0;
   let totalCards = 0;
-  
+  const messages = [];
+
   if (data.quizzes && data.quizzes.length > 0) {
     const result = await sendQuizzesToAnki(data.quizzes, deckName);
     totalSuccess += result.count;
+    totalSkipped += result.skipped || 0;
     totalCards += data.quizzes.length;
+    if (result.message) messages.push(result.message);
   }
-  
+
   if (data.flashcards && data.flashcards.length > 0) {
     const result = await sendFlashcardsToAnki(data.flashcards, deckName);
     totalSuccess += result.count;
+    totalSkipped += result.skipped || 0;
     totalCards += data.flashcards.length;
+    if (result.message) messages.push(result.message);
   }
-  
-  return { success: true, count: totalSuccess, total: totalCards };
+
+  return {
+    success: true,
+    count: totalSuccess,
+    skipped: totalSkipped,
+    total: totalCards,
+    message: messages.length > 0 ? messages.join('; ') : undefined
+  };
 }
 
 // Legacy handler for backwards compatibility
@@ -296,14 +340,22 @@ async function handleLegacySendBatch(request) {
       tags: CONFIG.DEFAULT_TAGS
     }));
     
-    const results = await addNotes(notes);
+    const canAddResults = await canAddNotes(notes);
+    const newNotes = notes.filter((_, index) => canAddResults[index]);
+    const skippedCount = notes.length - newNotes.length;
+
+    if (newNotes.length === 0) {
+      return { success: true, count: 0, skipped: skippedCount, total: notes.length };
+    }
+
+    const results = await addNotes(newNotes);
     const successCount = results.filter(id => id !== null).length;
-    
+
     if (successCount === 0 && notes.length > 0) {
       return { success: false, error: "0 Cards Added. Check if 'NotebookLM Quiz' Note Type exists!" };
     }
-    
-    return { success: true, count: successCount };
+
+    return { success: true, count: successCount, skipped: skippedCount, total: notes.length };
   } catch (error) {
     return { success: false, error: "Connection Failed: Is Anki open?" };
   }
