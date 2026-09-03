@@ -1,6 +1,6 @@
-# NotebookLM2Anki
+# Notebook2Anki
 
-A Chrome extension that exports **Quizzes** and **Flashcards** from [Google NotebookLM](https://notebooklm.google.com) directly to [Anki](https://apps.ankiweb.net/).
+**Notebook2Anki** is a Chrome extension that exports **Quizzes** and **Flashcards** from [Gemini Notebook](https://notebook.google.com/) (formerly NotebookLM) directly to [Anki](https://apps.ankiweb.net/).
 
 ## Features
 
@@ -10,8 +10,8 @@ A Chrome extension that exports **Quizzes** and **Flashcards** from [Google Note
 - 📦 **APKG Export**: Download as `.apkg` file (works offline, import anywhere)
 - 📄 **CSV Export**: Export as CSV for manual import or other tools
 - 🔢 **LaTeX/Math Support**: Cards render mathematical notation via MathJax
-- 🎨 **Beautiful Dark Theme**: Matching NotebookLM's aesthetic
-- 🔘 **UI Button Injection**: Export button appears directly in NotebookLM
+- 🎨 **Beautiful Dark Theme**: Matching Gemini Notebook's aesthetic
+- 🔘 **UI Button Injection**: Export button appears directly in Gemini Notebook
 
 ## Installation
 
@@ -21,7 +21,7 @@ A Chrome extension that exports **Quizzes** and **Flashcards** from [Google Note
 2. Open Chrome and go to `chrome://extensions/`
 3. Enable "Developer mode" (toggle in top right)
 4. Click "Load unpacked"
-5. Select the `NotebookLM2Anki` folder
+5. Select the `Notebook2Anki` folder
 
 ### From Chrome Web Store
 
@@ -31,8 +31,8 @@ A Chrome extension that exports **Quizzes** and **Flashcards** from [Google Note
 
 ### Method 1: Popup Menu (Recommended)
 
-1. Navigate to a notebook in [NotebookLM](https://notebooklm.google.com)
-2. Generate a Quiz or Flashcards using NotebookLM's features
+1. Navigate to a notebook in [Gemini Notebook](https://notebook.google.com/)
+2. Generate a Quiz or Flashcards using Gemini Notebook's features
 3. Click the extension icon in Chrome toolbar
 4. Choose your export method:
    - **Send to Anki**: Requires Anki desktop open with [AnkiConnect](https://ankiweb.net/shared/info/2055492159)
@@ -41,7 +41,7 @@ A Chrome extension that exports **Quizzes** and **Flashcards** from [Google Note
 
 ### Method 2: Injected Button
 
-1. When viewing quiz/flashcard content in NotebookLM, an "Anki Export" button appears
+1. When viewing quiz/flashcard content in Gemini Notebook, an "Anki Export" button appears
 2. Click the button to send directly to Anki via AnkiConnect
 
 ## Requirements
@@ -88,7 +88,7 @@ Both include dark theme styling and MathJax support.
 ## Project Structure
 
 ```
-NotebookLM2Anki/
+Notebook2Anki/
 ├── manifest.json           # Chrome extension manifest
 ├── src/
 │   ├── background/         # Service worker for AnkiConnect
@@ -111,7 +111,7 @@ No build step required. Load the extension directly in developer mode.
 
 ### Testing
 1. Load extension in Chrome
-2. Navigate to NotebookLM
+2. Navigate to Gemini Notebook
 3. Create quizzes/flashcards
 4. Test each export method
 
@@ -148,7 +148,7 @@ Contributions welcome! Please open an issue or pull request.
 - Or use APKG export which creates fresh note types
 
 ### No content found
-- Make sure you've generated a Quiz or Flashcards in NotebookLM first
+- Make sure you've generated a Quiz or Flashcards in Gemini Notebook first
 - Refresh the page and try again
 - Some notebooks may have different data structures
 

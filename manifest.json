@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "NotebookLM2Anki",
-  "version": "1.1.4",
-  "description": "Export NotebookLM Quizzes & Flashcards to Anki - via AnkiConnect, .apkg, or CSV",
+  "name": "Notebook2Anki",
+  "version": "2.0.0",
+  "description": "Export Gemini Notebook quizzes and flashcards to Anki via AnkiConnect, APKG, or CSV",
   "permissions": [
     "activeTab",
     "scripting",
@@ -10,7 +10,9 @@
   ],
   "host_permissions": [
     "https://notebooklm.google.com/*",
+    "https://notebook.google.com/*",
     "https://*.usercontent.goog/*",
+    "https://*.googleusercontent.com/*",
     "http://127.0.0.1:8765/*"
   ],
   "action": {
@@ -29,7 +31,9 @@
     {
       "matches": [
         "https://notebooklm.google.com/*",
-        "https://*.usercontent.goog/*"
+        "https://notebook.google.com/*",
+        "https://*.usercontent.goog/*",
+        "https://*.googleusercontent.com/*"
       ],
       "js": ["src/lib/extractor.js", "src/content/content.js"],
       "all_frames": true,

@@ -392,7 +392,8 @@ function hasContent(data) {
 
 function isNotebookLMUrl(value) {
   try {
-    return new URL(value).hostname === "notebooklm.google.com";
+    const hostname = new URL(value).hostname;
+    return hostname === "notebooklm.google.com" || hostname === "notebook.google.com";
   } catch {
     return false;
   }

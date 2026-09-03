@@ -78,14 +78,14 @@ jobs:
         uses: cardinalby/webext-buildtools-chrome-crx-action@v2
         with:
           zipFilePath: 'build/extension.zip'
-          crxFilePath: 'build/NotebookLM2Anki-v${{ needs.check-version.outputs.version }}.crx'
+          crxFilePath: 'build/Notebook2Anki-v${{ needs.check-version.outputs.version }}.crx'
           privateKey: ${{ secrets.CHROME_CRX_PRIVATE_KEY }}
         continue-on-error: true
 
       - name: Rename ZIP with version
         run: |
           VERSION="${{ needs.check-version.outputs.version }}"
-          mv build/extension.zip "build/NotebookLM2Anki-v${VERSION}.zip"
+          mv build/extension.zip "build/Notebook2Anki-v${VERSION}.zip"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -93,7 +93,7 @@ jobs:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: Release v${{ needs.check-version.outputs.version }}
           body: |
-            ## NotebookLM2Anki v${{ needs.check-version.outputs.version }}
+            ## Notebook2Anki v${{ needs.check-version.outputs.version }}
             
             ### Installation
             
@@ -109,7 +109,7 @@ jobs:
             2. Drag and drop into Chrome extensions page
             
             ### Features
-            - Export NotebookLM Quizzes & Flashcards to Anki
+            - Export Gemini Notebook quizzes and flashcards to Anki
             - AnkiConnect integration for direct export
             - APKG file generation for offline import
             - CSV export for universal compatibility
@@ -118,8 +118,8 @@ jobs:
             ### What's New
             See [commit history](../../commits/main) for changes.
           files: |
-            build/NotebookLM2Anki-v${{ needs.check-version.outputs.version }}.zip
-            build/NotebookLM2Anki-v${{ needs.check-version.outputs.version }}.crx
+            build/Notebook2Anki-v${{ needs.check-version.outputs.version }}.zip
+            build/Notebook2Anki-v${{ needs.check-version.outputs.version }}.crx
           fail_on_unmatched_files: false
           draft: false
           prerelease: false
