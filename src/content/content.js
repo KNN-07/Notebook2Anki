@@ -1,349 +1,381 @@
-// NotebookLM2Anki - Content Script
-// Main content script that orchestrates data extraction and UI injection
+// NotebookLM2Anki - NotebookLM bridge and injected export control
 
-(function() {
-  'use strict';
-  
-  // ==================== CONFIGURATION ====================
-  const CONFIG = {
-    BUTTON_ID: "notebooklm-to-anki-btn",
-    ANCHOR_SELECTORS: [
-      'button[aria-label="Good content rating"]',
-      'button[aria-label="Copy"]',
-      'button[aria-label="Download"]'
-    ]
-  };
+(function initializeContentScript() {
+  "use strict";
 
-  // ==================== UTILITY FUNCTIONS ====================
-  function unescapeHtml(str) {
-    if (!str) return "";
-    return str
-      .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'");
+  const CHANNEL = "notebooklm2anki";
+  const BUTTON_ID = "notebooklm-to-anki-btn";
+  const STYLE_ID = "notebooklm-to-anki-styles";
+  const TOAST_ID = "notebooklm-to-anki-toast";
+  const MESSAGE_TARGET = "background";
+  const SEND_ACTION = "sendToAnki";
+  const ANCHOR_SELECTORS = [
+    'button[aria-label="Download"]',
+    'button[aria-label="Copy"]',
+    'button[aria-label="Good content rating"]'
+  ];
+
+  let activeMiner = null;
+  let activeMinerCount = -1;
+  let activeRequestId = null;
+  let exportTimeout = null;
+  let resetTimeout = null;
+  let toastTimeout = null;
+  let uiState = "preparing";
+  let uiCount = 0;
+
+  if (window === window.top) initializeUi();
+  initializeMiner();
+
+  function initializeMiner() {
+    const announce = () => {
+      const data = extractPageData();
+      if (!data) return false;
+
+      window.top.postMessage({
+        channel: CHANNEL,
+        action: "miner-ready",
+        count: data.quizzes.length + data.flashcards.length
+      }, "*");
+      return true;
+    };
+
+    if (!announce()) {
+      const observer = new MutationObserver(() => {
+        if (announce()) observer.disconnect();
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+
+    window.addEventListener("message", event => {
+      if (
+        event.source !== window.top ||
+        event.data?.channel !== CHANNEL ||
+        event.data.action !== "export-request"
+      ) {
+        return;
+      }
+      exportFromFrame(event.data);
+    });
   }
 
-  function sanitizeDeckName(name) {
-    if (!name) return "Unknown Notebook";
-    return name.replace(/::/g, " - ").trim();
-  }
+  async function exportFromFrame(request) {
+    const data = extractPageData();
+    if (!hasContent(data)) {
+      postResult("export-error", request.requestId, {
+        error: "No quiz or flashcard content was found in this frame"
+      });
+      return;
+    }
 
-  // ==================== DATA EXTRACTION ====================
-  function extractFromPage() {
-    const appRoot = document.querySelector('[data-app-data]');
-    if (!appRoot) return null;
-    
-    const jsonString = appRoot.getAttribute('data-app-data');
-    if (!jsonString) return null;
-    
     try {
-      const cleanJson = unescapeHtml(jsonString);
-      const data = JSON.parse(cleanJson);
-      
-      return {
-        title: sanitizeDeckName(data.title || getNotebookTitleFromPage()),
-        quizzes: extractQuizzes(data),
-        flashcards: extractFlashcards(data),
-        extractedAt: new Date().toISOString()
-      };
-    } catch (e) {
-      console.error("[NotebookLM2Anki] Parse error:", e);
-      return null;
-    }
-  }
+      const response = await chrome.runtime.sendMessage({
+        target: MESSAGE_TARGET,
+        action: SEND_ACTION,
+        data,
+        deckName: request.deckName || data.title,
+        type: "all"
+      });
 
-  function getNotebookTitleFromPage() {
-    const input = document.querySelector('input[placeholder="Notebook title"]');
-    if (input && input.value) return input.value.trim();
-    
-    const label = document.querySelector('.title-label');
-    if (label && label.textContent) return label.textContent.trim();
-    
-    if (document.title && document.title.includes("- NotebookLM")) {
-      return document.title.replace("- NotebookLM", "").trim();
-    }
-    
-    return "Unknown Notebook";
-  }
+      if (!response?.success && !response?.count) {
+        throw new Error(response?.error || "Anki did not accept the export");
+      }
 
-  function extractQuizzes(data) {
-    const quizData = data.quiz || (data.mostRecentQuery && data.mostRecentQuery.quiz) || [];
-    if (!Array.isArray(quizData)) return [];
-    
-    return quizData.map(q => ({
-      type: 'quiz',
-      question: q.question || "",
-      hint: q.hint || "",
-      options: (q.answerOptions || []).map(opt => ({
-        text: opt.text || "",
-        isCorrect: !!opt.isCorrect,
-        rationale: opt.rationale || ""
-      }))
-    }));
-  }
-
-  function extractFlashcards(data) {
-    const flashcards = data.flashcards || [];
-    if (!Array.isArray(flashcards)) return [];
-    
-    return flashcards.map(card => ({
-      type: 'flashcard',
-      front: card.f || "",
-      back: card.b || ""
-    }));
-  }
-
-  // ==================== DATA MINER (for iframes) ====================
-  let isMinerConnected = false;
-
-  function initDataMiner() {
-    const appRoot = document.querySelector('[data-app-data]');
-    if (appRoot) {
-      console.log("[NotebookLM2Anki] ⛏️ Miner Ready");
-      window.top.postMessage({ action: "ANKI_MINER_READY" }, "*");
-      
-      window.addEventListener("message", (event) => {
-        if (event.data.action === "ANKI_TRIGGER_EXTRACT") {
-          const data = extractFromPage();
-          
-          if (!data || (data.quizzes.length === 0 && data.flashcards.length === 0)) {
-            window.top.postMessage({ 
-              action: "ANKI_REAL_FAIL", 
-              error: "No content found (0 quizzes, 0 flashcards)" 
-            }, "*");
-            return;
-          }
-
-          const customTitle = event.data.notebookTitle || data.title;
-          
-          // Convert to legacy format for background script
-          if (data.quizzes.length > 0) {
-            const batchData = data.quizzes.map(q => ({
-              question: q.question,
-              hint: q.hint,
-              option1: q.options[0]?.text || "",
-              flag1: q.options[0]?.isCorrect ? "True" : "False",
-              rationale1: q.options[0]?.rationale || "",
-              option2: q.options[1]?.text || "",
-              flag2: q.options[1]?.isCorrect ? "True" : "False",
-              rationale2: q.options[1]?.rationale || "",
-              option3: q.options[2]?.text || "",
-              flag3: q.options[2]?.isCorrect ? "True" : "False",
-              rationale3: q.options[2]?.rationale || "",
-              option4: q.options[3]?.text || "",
-              flag4: q.options[3]?.isCorrect ? "True" : "False",
-              rationale4: q.options[3]?.rationale || ""
-            }));
-            
-            chrome.runtime.sendMessage({
-              action: "sendBatchToAnki",
-              batchData: batchData,
-              deckTitle: customTitle
-            }, (res) => {
-              if (res && res.success) {
-                window.top.postMessage({ 
-                  action: "ANKI_REAL_SUCCESS", 
-                  count: batchData.length, 
-                  deck: customTitle,
-                  type: "quizzes"
-                }, "*");
-              } else {
-                window.top.postMessage({ 
-                  action: "ANKI_REAL_FAIL", 
-                  error: res ? res.error : "Unknown Error" 
-                }, "*");
-              }
-            });
-          } else if (data.flashcards.length > 0) {
-            // Handle flashcards (need to send via new format)
-            chrome.runtime.sendMessage({
-              action: "sendToAnki",
-              data: data,
-              deckName: customTitle,
-              type: "flashcards"
-            }, (res) => {
-              if (res && res.success) {
-                window.top.postMessage({ 
-                  action: "ANKI_REAL_SUCCESS", 
-                  count: data.flashcards.length, 
-                  deck: customTitle,
-                  type: "flashcards"
-                }, "*");
-              } else {
-                window.top.postMessage({ 
-                  action: "ANKI_REAL_FAIL", 
-                  error: res ? res.error : "Unknown Error" 
-                }, "*");
-              }
-            });
-          }
-        }
+      postResult("export-success", request.requestId, {
+        count: response.count || 0,
+        skipped: response.skipped || 0,
+        failed: response.failed || 0,
+        deckName: request.deckName || data.title
+      });
+    } catch (error) {
+      postResult("export-error", request.requestId, {
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }
 
-  // ==================== UI INJECTOR ====================
-  function initUiInjector() {
-    window.addEventListener("message", (event) => {
-      if (event.data.action === "ANKI_MINER_READY") {
-        isMinerConnected = true;
-        updateButtonState("ready");
-      } else if (event.data.action === "ANKI_REAL_SUCCESS") {
-        updateButtonState("success", event.data.count, event.data.deck);
-      } else if (event.data.action === "ANKI_REAL_FAIL") {
-        alert("⚠️ Export Failed: " + event.data.error);
-        updateButtonState("error");
+  function initializeUi() {
+    injectStyles();
+
+    window.addEventListener("message", event => {
+      if (event.data?.channel !== CHANNEL) return;
+
+      if (event.data.action === "miner-ready") {
+        const count = Number(event.data.count) || 0;
+        if (!activeMiner || count > activeMinerCount) {
+          activeMiner = event.source;
+          activeMinerCount = count;
+        }
+        updateButton("ready");
+        return;
+      }
+
+      if (event.data.requestId !== activeRequestId) return;
+      if (event.data.action === "export-success") {
+        finishRequest();
+        const count = Number(event.data.count) || 0;
+        const skipped = Number(event.data.skipped) || 0;
+        const failed = Number(event.data.failed) || 0;
+        updateButton(failed > 0 ? "error" : "success", count);
+
+        let message = `${formatCount(count, "card")} sent to Anki`;
+        if (skipped > 0) message += ` · ${skipped} already existed`;
+        if (failed > 0) message += ` · ${failed} failed`;
+        showToast(message, failed > 0 ? "error" : "success");
+      } else if (event.data.action === "export-error") {
+        finishRequest();
+        updateButton("error");
+        showToast(formatExportError(event.data.error), "error");
       }
     });
 
-    const observer = new MutationObserver(() => {
-      if (document.getElementById(CONFIG.BUTTON_ID)) return;
-      
-      let anchorBtn = null;
-      for (const selector of CONFIG.ANCHOR_SELECTORS) {
-        const found = document.querySelector(selector);
-        if (found) { anchorBtn = found; break; }
-      }
-      
-      if (anchorBtn) {
-        const container = anchorBtn.closest('div.flex') || anchorBtn.parentElement;
-        if (container) {
-          container.insertBefore(createExportButton(), container.firstChild);
-        }
-      }
-    });
-    
+    let insertionScheduled = false;
+    const scheduleInsertion = () => {
+      if (insertionScheduled) return;
+      insertionScheduled = true;
+      requestAnimationFrame(() => {
+        insertionScheduled = false;
+        insertButton();
+      });
+    };
+
+    scheduleInsertion();
+    const observer = new MutationObserver(scheduleInsertion);
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  function createExportButton() {
-    const btn = document.createElement("button");
-    btn.id = CONFIG.BUTTON_ID;
-    btn.className = "mdc-button mat-mdc-button mat-mdc-outlined-button mat-unthemed mat-mdc-button-base";
-    btn.style.cssText = `
-      border: 1px solid #3c4043;
-      border-radius: 20px;
-      padding: 0 16px;
-      margin-right: 8px;
-      color: #e3e3e3;
-      height: 36px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: not-allowed;
-      opacity: 0.5;
-      background: transparent;
-      font-family: 'Google Sans', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      letter-spacing: 0.25px;
-      transition: all 0.2s ease;
-      outline: none;
-    `;
-    
-    const downloadIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" height="18" viewBox="0 -960 960 960" width="18" fill="currentColor"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>`;
-    
-    btn.innerHTML = `
-      <span class="mat-mdc-button-persistent-ripple mdc-button__ripple"></span>
-      <span class="mat-mdc-button-touch-target"></span>
-      <span class="mdc-button__label" style="display: flex; align-items: center; gap: 6px;">
-        ${downloadIconSvg}
-        <span>Anki Export</span>
-      </span>
-    `;
-    
-    btn.disabled = true;
-    
-    btn.onmouseenter = () => {
-      if (!btn.disabled) {
-        btn.style.background = 'rgba(232, 234, 237, 0.08)';
-      }
-    };
-    
-    btn.onmouseleave = () => {
-      btn.style.background = 'transparent';
-    };
-    
-    btn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      if (!isMinerConnected) {
-        alert("Wait for page to fully load...");
-        return;
-      }
-      
-      const labelText = btn.querySelector(".mdc-button__label span:last-child");
-      if (labelText) labelText.innerText = "Extracting...";
-      btn.style.borderColor = "#a8c7fa";
-      btn.style.color = "#a8c7fa";
-      
-      let deckName = getNotebookTitleFromPage();
-      if (!deckName || deckName === "NotebookLM") {
-        deckName = prompt("Enter Notebook Name:");
-        if (!deckName) {
-          updateButtonState("ready");
-          return;
-        }
-      }
-      
-      // Trigger extraction in iframes
-      const iframes = document.querySelectorAll('iframe');
-      iframes.forEach(iframe => {
-        try {
-          iframe.contentWindow.postMessage({ 
-            action: "ANKI_TRIGGER_EXTRACT", 
-            notebookTitle: deckName 
-          }, "*");
-        } catch (e) {
-          // Cross-origin iframe, ignore
-        }
-      });
-    };
-    
-    return btn;
+  function insertButton() {
+    if (document.getElementById(BUTTON_ID)) return;
+    const anchor = findAnchor();
+    if (!anchor?.parentElement) return;
+    anchor.parentElement.insertBefore(createButton(), anchor);
+    updateButton(uiState, uiCount);
   }
 
-  function updateButtonState(state, count = 0, deckName = "") {
-    const btn = document.getElementById(CONFIG.BUTTON_ID);
-    if (!btn) return;
-    
-    const labelText = btn.querySelector(".mdc-button__label span:last-child");
-    
-    switch (state) {
-      case "ready":
-        if (labelText) labelText.innerText = "Anki Export";
-        btn.style.opacity = "1";
-        btn.style.cursor = "pointer";
-        btn.style.borderColor = "#3c4043";
-        btn.style.color = "#e3e3e3";
-        btn.style.background = "transparent";
-        btn.disabled = false;
-        break;
-        
-      case "success":
-        if (labelText) labelText.innerText = `Saved ${count}!`;
-        btn.style.borderColor = "#6dd58c";
-        btn.style.color = "#6dd58c";
-        btn.style.background = "rgba(109, 213, 140, 0.1)";
-        setTimeout(() => updateButtonState("ready"), 3000);
-        break;
-        
-      case "error":
-        if (labelText) labelText.innerText = "Error";
-        btn.style.borderColor = "#f28b82";
-        btn.style.color = "#f28b82";
-        btn.style.background = "rgba(242, 139, 130, 0.1)";
-        setTimeout(() => updateButtonState("ready"), 3000);
-        break;
+  function findAnchor() {
+    for (const selector of ANCHOR_SELECTORS) {
+      const candidates = Array.from(document.querySelectorAll(selector));
+      const visible = candidates.find(candidate => candidate.getClientRects().length > 0);
+      if (visible) return visible;
+    }
+    return null;
+  }
+
+  function createButton() {
+    const button = document.createElement("button");
+    button.id = BUTTON_ID;
+    button.className = "n2a-export-button";
+    button.type = "button";
+    button.innerHTML = `
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M8 7.5h8M8 11.5h5M6.5 3.5h11a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z"/>
+        <path d="m14.5 15 2 2 3.5-4"/>
+      </svg>
+      <span class="n2a-export-label">Preparing…</span>
+    `;
+    button.disabled = true;
+    button.setAttribute("aria-label", "Preparing NotebookLM export");
+    button.addEventListener("click", startExport);
+    return button;
+  }
+
+  function startExport(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!activeMiner || activeRequestId) return;
+
+    const requestId = createRequestId();
+    activeRequestId = requestId;
+    updateButton("loading");
+
+    const extractor = globalThis.NotebookLM2AnkiExtractor;
+    const deckName = extractor?.sanitizeDeckName?.(getNotebookTitle()) || "NotebookLM Export";
+    activeMiner.postMessage({
+      channel: CHANNEL,
+      action: "export-request",
+      requestId,
+      deckName
+    }, "*");
+
+    exportTimeout = setTimeout(() => {
+      if (activeRequestId !== requestId) return;
+      finishRequest();
+      updateButton("error");
+      showToast("Export timed out. Reopen the notebook and try again.", "error");
+    }, 12000);
+  }
+
+  function updateButton(state, count = 0) {
+    uiState = state;
+    uiCount = count;
+    const button = document.getElementById(BUTTON_ID);
+    if (!button) return;
+    const label = button.querySelector(".n2a-export-label");
+    if (!label) return;
+
+    clearTimeout(resetTimeout);
+    button.dataset.state = state;
+    button.disabled = state === "preparing" || state === "loading";
+    button.removeAttribute("aria-busy");
+
+    const states = {
+      preparing: ["Preparing…", "Preparing NotebookLM export"],
+      ready: ["Export to Anki", "Export NotebookLM cards to Anki"],
+      loading: ["Exporting…", "Exporting NotebookLM cards to Anki"],
+      success: [`Saved ${count}`, `${formatCount(count, "card")} sent to Anki`],
+      error: ["Try again", "Export failed. Try again"]
+    };
+    const [text, accessibleName] = states[state] || states.preparing;
+    label.textContent = text;
+    button.setAttribute("aria-label", accessibleName);
+    if (state === "loading") button.setAttribute("aria-busy", "true");
+
+    if (state === "success" || state === "error") {
+      resetTimeout = setTimeout(() => updateButton("ready"), 3500);
     }
   }
 
-  // ==================== INITIALIZATION ====================
-  initDataMiner();
-  initUiInjector();
-  
-  console.log("[NotebookLM2Anki] Content script loaded");
+  function showToast(message, type) {
+    let toast = document.getElementById(TOAST_ID);
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = TOAST_ID;
+      toast.className = "n2a-export-toast";
+      toast.setAttribute("role", type === "error" ? "alert" : "status");
+      toast.setAttribute("aria-live", type === "error" ? "assertive" : "polite");
+      document.documentElement.append(toast);
+    }
+
+    clearTimeout(toastTimeout);
+    toast.className = `n2a-export-toast is-visible is-${type}`;
+    toast.setAttribute("role", type === "error" ? "alert" : "status");
+    toast.textContent = message;
+    toastTimeout = setTimeout(() => toast.classList.remove("is-visible"), 6000);
+  }
+
+  function injectStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      #${BUTTON_ID}.n2a-export-button {
+        appearance: none;
+        min-height: 36px;
+        margin-inline-end: 8px;
+        padding: 0 14px;
+        border: 1px solid rgba(168, 199, 250, .42);
+        border-radius: 9px;
+        background: rgba(168, 199, 250, .08);
+        color: #d7e6ff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        font: 600 13px/1 "Google Sans", "Segoe UI", sans-serif;
+        letter-spacing: .01em;
+        flex: 0 0 auto;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 120ms ease;
+      }
+      #${BUTTON_ID}.n2a-export-button svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      #${BUTTON_ID}.n2a-export-button:hover:not(:disabled) {
+        background: rgba(168, 199, 250, .16);
+        border-color: rgba(168, 199, 250, .68);
+      }
+      #${BUTTON_ID}.n2a-export-button:active:not(:disabled) { transform: translateY(1px); }
+      #${BUTTON_ID}.n2a-export-button:focus-visible {
+        outline: 2px solid #d7e6ff;
+        outline-offset: 2px;
+      }
+      #${BUTTON_ID}.n2a-export-button:disabled { cursor: wait; opacity: .62; }
+      #${BUTTON_ID}[data-state="loading"] svg { animation: n2a-pulse 900ms ease-in-out infinite; }
+      #${BUTTON_ID}[data-state="success"] {
+        border-color: rgba(129, 201, 149, .62);
+        background: rgba(129, 201, 149, .12);
+        color: #b7e4c2;
+      }
+      #${BUTTON_ID}[data-state="error"] {
+        border-color: rgba(242, 139, 130, .66);
+        background: rgba(242, 139, 130, .12);
+        color: #ffc3bd;
+      }
+      .n2a-export-toast {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 1200;
+        max-width: min(360px, calc(100vw - 32px));
+        padding: 12px 14px;
+        border: 1px solid #4b4f52;
+        border-radius: 10px;
+        background: #222426;
+        color: #f0f1f2;
+        box-shadow: 0 10px 30px rgba(10, 12, 14, .32);
+        font: 500 13px/1.45 "Google Sans", "Segoe UI", sans-serif;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition: opacity 180ms ease, transform 180ms ease;
+      }
+      .n2a-export-toast.is-visible { opacity: 1; transform: translateY(0); }
+      .n2a-export-toast.is-success { border-color: rgba(129, 201, 149, .45); }
+      .n2a-export-toast.is-error { border-color: rgba(242, 139, 130, .5); }
+      @keyframes n2a-pulse { 50% { opacity: .45; } }
+      @media (prefers-reduced-motion: reduce) {
+        #${BUTTON_ID}.n2a-export-button,
+        .n2a-export-toast { transition: none; }
+        #${BUTTON_ID}[data-state="loading"] svg { animation: none; }
+      }
+    `;
+    document.head.append(style);
+  }
+
+  function extractPageData() {
+    return globalThis.NotebookLM2AnkiExtractor?.extractFromPage?.() || null;
+  }
+
+  function getNotebookTitle() {
+    const data = extractPageData();
+    if (data?.title && data.title !== "Unknown Notebook") return data.title;
+    return document.title.replace(/\s*(?:-|–|\|)\s*NotebookLM\s*$/i, "").trim();
+  }
+
+  function hasContent(data) {
+    return Boolean(data && (data.quizzes?.length || data.flashcards?.length));
+  }
+
+  function finishRequest() {
+    activeRequestId = null;
+    clearTimeout(exportTimeout);
+    exportTimeout = null;
+  }
+
+  function postResult(action, requestId, detail) {
+    window.top.postMessage({ channel: CHANNEL, action, requestId, ...detail }, "*");
+  }
+
+  function createRequestId() {
+    return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  }
+
+  function formatCount(count, noun) {
+    return `${count} ${noun}${count === 1 ? "" : "s"}`;
+  }
+
+  function formatExportError(error) {
+    const message = String(error || "Export failed");
+    if (/fetch|network|connect|anki/i.test(message)) {
+      return "Anki is unavailable. Open Anki with AnkiConnect, then try again.";
+    }
+    return `${message.replace(/[.!]+$/, "")}. Try again.`;
+  }
 })();

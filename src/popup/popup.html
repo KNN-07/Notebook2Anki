@@ -1,142 +1,163 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171918">
   <title>NotebookLM2Anki</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <div class="header-title">
-        <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-          <path d="M8 7h8M8 11h8M8 15h5"></path>
-        </svg>
-        <h1>NotebookLM2Anki</h1>
+  <a class="skip-link" href="#main-content">Skip to export controls</a>
+
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32">
+            <path d="M8.5 5.5h11a3 3 0 0 1 3 3v18h-14a3 3 0 0 1-3-3v-15a3 3 0 0 1 3-3Z"/>
+            <path d="M9.5 11h9M9.5 15h6"/>
+            <path d="m17 21 2 2 5-6"/>
+          </svg>
+        </span>
+        <div>
+          <h1>NotebookLM<span>2Anki</span></h1>
+          <p>Study export</p>
+        </div>
       </div>
-      <div id="status-indicator" class="status checking">
-        <span class="status-dot"></span>
-        <span id="status-text">Checking...</span>
-      </div>
+
+      <button id="status-indicator" class="connection is-checking" type="button" aria-label="Checking Anki connection">
+        <span class="connection-dot" aria-hidden="true"></span>
+        <span id="status-text">Checking Anki</span>
+      </button>
     </header>
 
-    <section id="content-section" class="section">
-      <h2>Content Found</h2>
-      <div id="content-info" class="content-info">
-        <div class="content-row">
-          <svg class="content-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-          <span id="quiz-count">0 Quiz Questions</span>
-        </div>
-        <div class="content-row">
-          <svg class="content-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-            <path d="M7 8h10M7 12h6"></path>
-          </svg>
-          <span id="flashcard-count">0 Flashcards</span>
-        </div>
-      </div>
-      <div id="no-content" class="no-content hidden">
-        <svg class="no-content-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-        <p>No content found on this page.</p>
-        <p class="hint">Make sure you're on a NotebookLM notebook page.</p>
-      </div>
-    </section>
-
-    <section class="section">
-      <h2>Deck Name</h2>
-      <input type="text" id="deck-name" placeholder="Enter deck name..." />
-      <div id="deck-preview" class="deck-preview hidden">
-        <span class="preview-label">Creates:</span>
-        <span id="preview-quiz" class="preview-deck hidden">📝 <span class="preview-name"></span></span>
-        <span id="preview-flashcard" class="preview-deck hidden">🗂️ <span class="preview-name"></span></span>
-      </div>
-    </section>
-
-    <section class="section export-section">
-      <h2>Export Options</h2>
-      
-      <button id="btn-anki-connect" class="btn btn-primary" title="Send directly to Anki (requires Anki open with AnkiConnect)">
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-        </svg>
-        <span class="btn-text">Send to Anki</span>
-        <span class="btn-spinner hidden"></span>
-      </button>
-      
-      <button id="btn-apkg" class="btn btn-secondary" title="Download as .apkg file">
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="7 10 12 15 17 10"></polyline>
-          <line x1="12" y1="15" x2="12" y2="3"></line>
-        </svg>
-        <span class="btn-text">Download .apkg</span>
-        <span class="btn-spinner hidden"></span>
-      </button>
-      
-      <div class="btn-group">
-        <button id="btn-csv-all" class="btn btn-tertiary" title="Export all content as CSV">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-          </svg>
-          <span class="btn-text">Export CSV</span>
-        </button>
-        <div class="dropdown">
-          <button id="btn-csv-dropdown" class="btn btn-tertiary btn-dropdown">
-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
+    <main id="main-content">
+      <section class="source-section" aria-labelledby="source-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="source-title">Current notebook</h2>
+            <p id="source-detail">Scanning the active tab</p>
+          </div>
+          <button id="btn-refresh" class="icon-button" type="button" aria-label="Scan the active tab again" title="Scan again">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.35 5.65M20 4v7h-7"/></svg>
           </button>
-          <div id="csv-menu" class="dropdown-menu hidden">
-            <button id="btn-csv-quizzes">
-              <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-              </svg>
-              Quizzes Only
-            </button>
-            <button id="btn-csv-flashcards">
-              <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-              </svg>
-              Flashcards Only
-            </button>
-            <button id="btn-csv-all-headerless">
-              <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              </svg>
-              All (No Header)
-            </button>
-            <button id="btn-csv-quiz-as-flashcard">
-              <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M16 3h5v5M8 21H3v-5M21 3l-9 9M3 21l9-9"></path>
-              </svg>
-              Quiz as Flashcard
-            </button>
+        </div>
+
+        <div id="content-loading" class="content-loading" role="status" aria-label="Scanning the active tab">
+          <span class="skeleton skeleton-wide"></span>
+          <span class="skeleton skeleton-short"></span>
+        </div>
+
+        <div id="content-info" class="content-summary hidden" aria-live="polite">
+          <div class="content-stat">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"/><path d="M9.7 9a2.4 2.4 0 1 1 3.46 2.16c-.76.38-1.16.83-1.16 1.59M12 16.25h.01"/></svg>
+            <span id="quiz-count" class="stat-number">0</span>
+            <span id="quiz-label" class="stat-label">quiz questions</span>
+          </div>
+          <span class="summary-divider" aria-hidden="true"></span>
+          <div class="content-stat">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h10M7 13h6"/></svg>
+            <span id="flashcard-count" class="stat-number">0</span>
+            <span id="flashcard-label" class="stat-label">flashcards</span>
           </div>
         </div>
-      </div>
-    </section>
+
+        <div id="no-content" class="empty-state hidden" role="status">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H20v16H6.5A2.5 2.5 0 0 1 4 17.5v-11Z"/><path d="M8 9h8M8 13h5"/></svg>
+          <div>
+            <strong>No study content found</strong>
+            <p>Open a notebook and generate a quiz or flashcards, then scan again.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="deck-section" aria-labelledby="deck-label">
+        <label id="deck-label" for="deck-name">Deck name</label>
+        <input id="deck-name" type="text" autocomplete="off" maxlength="120" placeholder="Notebook title" aria-describedby="deck-preview">
+        <div id="deck-preview" class="deck-preview hidden">
+          <span>Creates</span>
+          <span id="preview-quiz" class="preview-deck hidden"><b>Quiz</b><span class="preview-name"></span></span>
+          <span id="preview-flashcard" class="preview-deck hidden"><b>Cards</b><span class="preview-name"></span></span>
+        </div>
+      </section>
+
+      <section class="export-section" aria-labelledby="export-title">
+        <div class="section-heading export-heading">
+          <div>
+            <h2 id="export-title">Choose a format</h2>
+            <p>Use the same content wherever you study.</p>
+          </div>
+        </div>
+
+        <div class="export-list">
+          <button id="btn-anki-connect" class="export-action" type="button" disabled>
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19h14"/></svg>
+            </span>
+            <span class="action-copy">
+              <strong>Send to Anki</strong>
+              <small id="anki-action-detail">Requires AnkiConnect</small>
+            </span>
+            <span class="action-end" aria-hidden="true">
+              <svg class="action-arrow" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+              <span class="action-spinner"></span>
+            </span>
+          </button>
+
+          <button id="btn-apkg" class="export-action" type="button" disabled>
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 14h6M12 11v6"/></svg>
+            </span>
+            <span class="action-copy">
+              <strong>Download APKG</strong>
+              <small>Portable Anki package</small>
+            </span>
+            <span class="action-end" aria-hidden="true">
+              <svg class="action-arrow" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+              <span class="action-spinner"></span>
+            </span>
+          </button>
+
+          <div class="csv-action-group">
+            <button id="btn-csv-all" class="export-action csv-main" type="button" disabled>
+              <span class="action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg>
+              </span>
+              <span class="action-copy">
+                <strong>Export CSV</strong>
+                <small>Universal spreadsheet files</small>
+              </span>
+              <span class="action-end" aria-hidden="true">
+                <svg class="action-arrow" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+              </span>
+            </button>
+            <button id="btn-csv-dropdown" class="csv-options-toggle" type="button" aria-label="Show CSV export options" aria-expanded="false" aria-controls="csv-menu" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+            </button>
+          </div>
+
+          <div id="csv-menu" class="csv-menu hidden" role="menu" aria-label="CSV export options">
+            <button id="btn-csv-quizzes" type="button" role="menuitem">Quizzes only <span>15 fields</span></button>
+            <button id="btn-csv-flashcards" type="button" role="menuitem">Flashcards only <span>Front and back</span></button>
+            <button id="btn-csv-all-headerless" type="button" role="menuitem">All without headers <span>Raw rows</span></button>
+            <button id="btn-csv-quiz-as-flashcard" type="button" role="menuitem">Quiz as basic cards <span>Question and answer</span></button>
+          </div>
+        </div>
+      </section>
+
+      <div id="message" class="message hidden" role="status" aria-live="polite"></div>
+    </main>
 
     <footer>
-      <div id="message" class="message hidden"></div>
-      <p class="version" id="version-display">v...</p>
+      <span class="local-note">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2"/><rect x="5" y="10" width="14" height="10" rx="2"/></svg>
+        Exports stay on this device
+      </span>
+      <span id="version-display" class="version">v…</span>
     </footer>
   </div>
 
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

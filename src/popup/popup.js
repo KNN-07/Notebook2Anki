@@ -1,456 +1,421 @@
-// NotebookLM2Anki - Popup Script
-// Handles popup UI interactions and export actions
+import { ACTIONS, EXPORT_TYPES, MESSAGE_TARGETS } from "../lib/constants.js";
+import {
+  exportAllToCSV,
+  exportFlashcardsToCSV,
+  exportQuizzesToCSV,
+  exportQuizFlashcardsToCSV
+} from "../lib/csv-exporter.js";
+import { sanitizeDeckName, sanitizeFilename } from "../lib/utils.js";
 
-document.addEventListener('DOMContentLoaded', async () => {
-  // Set version from manifest
-  const manifest = chrome.runtime.getManifest();
-  const versionDisplay = document.getElementById('version-display');
-  if (versionDisplay) {
-    versionDisplay.textContent = `v${manifest.version}`;
-  }
+const elements = {
+  status: document.getElementById("status-indicator"),
+  statusText: document.getElementById("status-text"),
+  sourceDetail: document.getElementById("source-detail"),
+  contentLoading: document.getElementById("content-loading"),
+  contentInfo: document.getElementById("content-info"),
+  noContent: document.getElementById("no-content"),
+  quizCount: document.getElementById("quiz-count"),
+  quizLabel: document.getElementById("quiz-label"),
+  flashcardCount: document.getElementById("flashcard-count"),
+  flashcardLabel: document.getElementById("flashcard-label"),
+  deckName: document.getElementById("deck-name"),
+  deckPreview: document.getElementById("deck-preview"),
+  previewQuiz: document.getElementById("preview-quiz"),
+  previewFlashcard: document.getElementById("preview-flashcard"),
+  refresh: document.getElementById("btn-refresh"),
+  anki: document.getElementById("btn-anki-connect"),
+  ankiDetail: document.getElementById("anki-action-detail"),
+  apkg: document.getElementById("btn-apkg"),
+  csvAll: document.getElementById("btn-csv-all"),
+  csvToggle: document.getElementById("btn-csv-dropdown"),
+  csvMenu: document.getElementById("csv-menu"),
+  csvQuizzes: document.getElementById("btn-csv-quizzes"),
+  csvFlashcards: document.getElementById("btn-csv-flashcards"),
+  csvHeaderless: document.getElementById("btn-csv-all-headerless"),
+  csvQuizFlashcards: document.getElementById("btn-csv-quiz-as-flashcard"),
+  message: document.getElementById("message"),
+  version: document.getElementById("version-display")
+};
 
-  // DOM Elements
-  const statusIndicator = document.getElementById('status-indicator');
-  const statusText = document.getElementById('status-text');
-  const quizCount = document.getElementById('quiz-count');
-  const flashcardCount = document.getElementById('flashcard-count');
-  const contentInfo = document.getElementById('content-info');
-  const noContent = document.getElementById('no-content');
-  const deckNameInput = document.getElementById('deck-name');
-  const messageEl = document.getElementById('message');
-  
-  // Buttons
-  const btnAnkiConnect = document.getElementById('btn-anki-connect');
-  const btnApkg = document.getElementById('btn-apkg');
-  const btnCsvAll = document.getElementById('btn-csv-all');
-  const btnCsvDropdown = document.getElementById('btn-csv-dropdown');
-  const csvMenu = document.getElementById('csv-menu');
-  const btnCsvQuizzes = document.getElementById('btn-csv-quizzes');
-  const btnCsvFlashcards = document.getElementById('btn-csv-flashcards');
-  const btnCsvHeaderless = document.getElementById('btn-csv-all-headerless');
-  const btnCsvQuizAsFlashcard = document.getElementById('btn-csv-quiz-as-flashcard');
+let extractedData = null;
+let ankiConnected = false;
+let scanning = false;
+let operationInProgress = false;
+let checkingAnki = false;
+let messageTimeout = null;
 
-  const deckPreview = document.getElementById('deck-preview');
-  const previewQuiz = document.getElementById('preview-quiz');
-  const previewFlashcard = document.getElementById('preview-flashcard');
+bindEvents();
+initialize();
 
-  // State
-  let extractedData = null;
-  let ankiConnected = false;
+async function initialize() {
+  elements.version.textContent = `v${chrome.runtime.getManifest().version}`;
+  await Promise.allSettled([checkAnkiStatus(), scanActiveTab()]);
+}
 
-  // ==================== INITIALIZATION ====================
-  
-  // Check AnkiConnect status
-  checkAnkiStatus();
-  
-  // Extract data from current page
-  extractDataFromPage();
-
-  // ==================== ANKI STATUS ====================
-  
-  async function checkAnkiStatus() {
-    try {
-      const response = await chrome.runtime.sendMessage({ action: 'checkAnki' });
-      if (response && response.connected) {
-        ankiConnected = true;
-        statusIndicator.className = 'status connected';
-        statusText.textContent = 'Anki Connected';
-      } else {
-        ankiConnected = false;
-        statusIndicator.className = 'status disconnected';
-        statusText.textContent = 'Anki Not Found';
-      }
-    } catch (error) {
-      ankiConnected = false;
-      statusIndicator.className = 'status disconnected';
-      statusText.textContent = 'Connection Error';
-    }
-    updateButtonStates();
-  }
-
-  // ==================== DATA EXTRACTION ====================
-  
-  async function extractDataFromPage() {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      
-      if (!tab.url.includes('notebooklm.google.com')) {
-        showNoContent();
-        return;
-      }
-
-      // Execute extraction script in all frames
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id, allFrames: true },
-        func: extractFromPageContext
-      });
-
-      // Find the result with data
-      for (const result of results) {
-        if (result.result && (result.result.quizzes?.length > 0 || result.result.flashcards?.length > 0)) {
-          extractedData = result.result;
-          break;
-        }
-      }
-
-      if (extractedData) {
-        updateContentDisplay();
-      } else {
-        showNoContent();
-      }
-    } catch (error) {
-      console.error('[NotebookLM2Anki] Extraction error:', error);
-      showNoContent();
-    }
-  }
-
-  function extractFromPageContext() {
-    const appRoot = document.querySelector('[data-app-data]');
-    if (!appRoot) return null;
-    
-    const jsonString = appRoot.getAttribute('data-app-data');
-    if (!jsonString) return null;
-    
-    try {
-      // Unescape HTML entities
-      const cleanJson = jsonString
-        .replace(/&quot;/g, '"')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&#39;/g, "'");
-      
-      const data = JSON.parse(cleanJson);
-      
-      // Extract title
-      let title = data.title || 'Unknown Notebook';
-      const titleInput = document.querySelector('input[placeholder="Notebook title"]');
-      if (titleInput && titleInput.value) {
-        title = titleInput.value.trim();
-      }
-      title = title.replace(/::/g, ' - ').trim();
-      
-      // Extract quizzes
-      const quizData = data.quiz || (data.mostRecentQuery && data.mostRecentQuery.quiz) || [];
-      const quizzes = Array.isArray(quizData) ? quizData.map(q => ({
-        type: 'quiz',
-        question: q.question || '',
-        hint: q.hint || '',
-        options: (q.answerOptions || []).map(opt => ({
-          text: opt.text || '',
-          isCorrect: !!opt.isCorrect,
-          rationale: opt.rationale || ''
-        }))
-      })) : [];
-      
-      // Extract flashcards
-      const flashcardData = data.flashcards || [];
-      const flashcards = Array.isArray(flashcardData) ? flashcardData.map(card => ({
-        type: 'flashcard',
-        front: card.f || '',
-        back: card.b || ''
-      })) : [];
-      
-      return { title, quizzes, flashcards };
-    } catch (e) {
-      console.error('Parse error:', e);
-      return null;
-    }
-  }
-
-  function updateContentDisplay() {
-    const numQuizzes = extractedData.quizzes?.length || 0;
-    const numFlashcards = extractedData.flashcards?.length || 0;
-    
-    quizCount.textContent = `${numQuizzes} Quiz Question${numQuizzes !== 1 ? 's' : ''}`;
-    flashcardCount.textContent = `${numFlashcards} Flashcard${numFlashcards !== 1 ? 's' : ''}`;
-    
-    deckNameInput.value = extractedData.title || '';
-    
-    contentInfo.classList.remove('hidden');
-    noContent.classList.add('hidden');
-    
+function bindEvents() {
+  elements.status.addEventListener("click", checkAnkiStatus);
+  elements.refresh.addEventListener("click", scanActiveTab);
+  elements.deckName.addEventListener("input", updateDeckPreview);
+  elements.deckName.addEventListener("blur", () => {
+    if (elements.deckName.value.trim()) elements.deckName.value = getDeckName();
     updateDeckPreview();
-    updateButtonStates();
-  }
+  });
 
-  function showNoContent() {
-    contentInfo.classList.add('hidden');
-    noContent.classList.remove('hidden');
-    updateButtonStates();
-  }
+  elements.anki.addEventListener("click", () => runExport(elements.anki, sendToAnki));
+  elements.apkg.addEventListener("click", () => runExport(elements.apkg, downloadApkg));
+  elements.csvAll.addEventListener("click", () => runCsvExport(() =>
+    exportAllToCSV(extractedData, { filenameBase: getFilenameBase() })
+  ));
+  elements.csvQuizzes.addEventListener("click", () => runCsvExport(() =>
+    exportQuizzesToCSV(extractedData.quizzes, {
+      filename: `${getFilenameBase()}-quizzes.csv`
+    })
+  ));
+  elements.csvFlashcards.addEventListener("click", () => runCsvExport(() =>
+    exportFlashcardsToCSV(extractedData.flashcards, {
+      filename: `${getFilenameBase()}-flashcards.csv`
+    })
+  ));
+  elements.csvHeaderless.addEventListener("click", () => runCsvExport(() =>
+    exportAllToCSV(extractedData, {
+      filenameBase: getFilenameBase(),
+      includeHeader: false
+    })
+  ));
+  elements.csvQuizFlashcards.addEventListener("click", () => runCsvExport(() =>
+    exportQuizFlashcardsToCSV(extractedData.quizzes, {
+      filename: `${getFilenameBase()}-quiz-flashcards.csv`
+    })
+  ));
 
-  function updateButtonStates() {
-    const hasContent = extractedData && 
-      ((extractedData.quizzes?.length || 0) > 0 || (extractedData.flashcards?.length || 0) > 0);
-    
-    btnAnkiConnect.disabled = !hasContent || !ankiConnected;
-    btnApkg.disabled = !hasContent;
-    btnCsvAll.disabled = !hasContent;
-    btnCsvDropdown.disabled = !hasContent;
-  }
+  elements.csvToggle.addEventListener("click", event => {
+    event.stopPropagation();
+    toggleCsvMenu(elements.csvMenu.classList.contains("hidden"));
+  });
+  elements.csvToggle.addEventListener("keydown", event => {
+    if (event.key !== "ArrowDown") return;
+    event.preventDefault();
+    toggleCsvMenu(true);
+    firstEnabledMenuItem()?.focus();
+  });
+  elements.csvMenu.addEventListener("click", event => {
+    if (event.target.closest("button")) toggleCsvMenu(false);
+  });
+  document.addEventListener("click", event => {
+    if (!event.target.closest(".csv-action-group") && !event.target.closest("#csv-menu")) {
+      toggleCsvMenu(false);
+    }
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || elements.csvMenu.classList.contains("hidden")) return;
+    toggleCsvMenu(false);
+    elements.csvToggle.focus();
+  });
+}
 
-  // ==================== EXPORT FUNCTIONS ====================
-  
-  function getDeckName() {
-    return deckNameInput.value.trim() || extractedData?.title || 'NotebookLM Export';
-  }
+async function checkAnkiStatus() {
+  if (checkingAnki) return;
+  checkingAnki = true;
+  elements.status.disabled = true;
+  setConnectionState("checking", "Checking Anki");
 
-  function updateDeckPreview() {
-    const baseName = getDeckName();
-    const hasQuizzes = extractedData?.quizzes?.length > 0;
-    const hasFlashcards = extractedData?.flashcards?.length > 0;
-    
-    if (!hasQuizzes && !hasFlashcards) {
-      deckPreview.classList.add('hidden');
+  try {
+    const response = await chrome.runtime.sendMessage({
+      target: MESSAGE_TARGETS.BACKGROUND,
+      action: ACTIONS.CHECK_ANKI
+    });
+    ankiConnected = Boolean(response?.connected);
+    setConnectionState(
+      ankiConnected ? "connected" : "disconnected",
+      ankiConnected ? "Anki ready" : "Anki offline"
+    );
+  } catch {
+    ankiConnected = false;
+    setConnectionState("disconnected", "Anki offline");
+  } finally {
+    checkingAnki = false;
+    elements.status.disabled = false;
+    updateActionStates();
+  }
+}
+
+async function scanActiveTab() {
+  if (scanning) return;
+  scanning = true;
+  extractedData = null;
+  setScanningState();
+  updateActionStates();
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !isNotebookLMUrl(tab.url || tab.pendingUrl)) {
+      showEmptyState(
+        "Open NotebookLM to export",
+        "Select a notebook, generate a quiz or flashcards, then scan again."
+      );
       return;
     }
-    
-    deckPreview.classList.remove('hidden');
-    
-    if (hasQuizzes) {
-      previewQuiz.classList.remove('hidden');
-      previewQuiz.querySelector('.preview-name').textContent = `${baseName} - Quiz`;
-    } else {
-      previewQuiz.classList.add('hidden');
+
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      files: ["src/lib/extractor.js"]
+    });
+    const frameResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      func: () => globalThis.NotebookLM2AnkiExtractor?.extractFromPage?.() || null
+    });
+
+    extractedData = mergeFrameData(frameResults.map(result => result.result).filter(Boolean));
+    if (!hasContent(extractedData)) {
+      extractedData = null;
+      showEmptyState(
+        "No study content found",
+        "Generate a quiz or flashcards in this notebook, then scan again."
+      );
+      return;
     }
-    
-    if (hasFlashcards) {
-      previewFlashcard.classList.remove('hidden');
-      previewFlashcard.querySelector('.preview-name').textContent = `${baseName} - Flashcard`;
-    } else {
-      previewFlashcard.classList.add('hidden');
+
+    showContentState();
+  } catch (error) {
+    extractedData = null;
+    showEmptyState(
+      "This notebook could not be read",
+      "Reload NotebookLM, reopen this popup, and scan again."
+    );
+    showMessage(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    scanning = false;
+    elements.refresh.classList.remove("is-loading");
+    elements.refresh.removeAttribute("aria-busy");
+    updateActionStates();
+  }
+}
+
+function setScanningState() {
+  elements.sourceDetail.textContent = "Scanning the active tab";
+  elements.contentLoading.classList.remove("hidden");
+  elements.contentInfo.classList.add("hidden");
+  elements.noContent.classList.add("hidden");
+  elements.deckPreview.classList.add("hidden");
+  elements.refresh.classList.add("is-loading");
+  elements.refresh.setAttribute("aria-busy", "true");
+  toggleCsvMenu(false);
+}
+
+function showContentState() {
+  const quizCount = extractedData.quizzes.length;
+  const flashcardCount = extractedData.flashcards.length;
+  elements.sourceDetail.textContent = extractedData.title;
+  elements.quizCount.textContent = quizCount;
+  elements.quizLabel.textContent = quizCount === 1 ? "quiz question" : "quiz questions";
+  elements.flashcardCount.textContent = flashcardCount;
+  elements.flashcardLabel.textContent = flashcardCount === 1 ? "flashcard" : "flashcards";
+  elements.deckName.value = extractedData.title === "Unknown Notebook" ? "" : extractedData.title;
+
+  elements.contentLoading.classList.add("hidden");
+  elements.noContent.classList.add("hidden");
+  elements.contentInfo.classList.remove("hidden");
+  updateDeckPreview();
+}
+
+function showEmptyState(title, copy) {
+  elements.sourceDetail.textContent = "Nothing ready to export";
+  elements.noContent.querySelector("strong").textContent = title;
+  elements.noContent.querySelector("p").textContent = copy;
+  elements.contentLoading.classList.add("hidden");
+  elements.contentInfo.classList.add("hidden");
+  elements.noContent.classList.remove("hidden");
+  elements.deckPreview.classList.add("hidden");
+}
+
+function mergeFrameData(results) {
+  const merged = { title: "", quizzes: [], flashcards: [] };
+  for (const result of results) {
+    if (!merged.title && result.title && result.title !== "Unknown Notebook") {
+      merged.title = result.title;
     }
+    if (Array.isArray(result.quizzes)) merged.quizzes.push(...result.quizzes);
+    if (Array.isArray(result.flashcards)) merged.flashcards.push(...result.flashcards);
   }
 
-  deckNameInput.addEventListener('input', updateDeckPreview);
+  merged.quizzes = deduplicate(merged.quizzes, quiz =>
+    JSON.stringify([quiz.question, quiz.options?.map(option => option.text)])
+  );
+  merged.flashcards = deduplicate(merged.flashcards, card =>
+    JSON.stringify([card.front, card.back])
+  );
+  merged.title = sanitizeDeckName(merged.title, "Unknown Notebook");
+  return merged;
+}
 
-  function showMessage(text, type = 'info') {
-    messageEl.textContent = text;
-    messageEl.className = `message ${type}`;
-    messageEl.classList.remove('hidden');
-    
-    setTimeout(() => {
-      messageEl.classList.add('hidden');
-    }, 5000);
+function updateDeckPreview() {
+  if (!hasContent(extractedData)) {
+    elements.deckPreview.classList.add("hidden");
+    return;
   }
 
-  // Send to AnkiConnect
-  btnAnkiConnect.addEventListener('click', async () => {
-    if (!extractedData) return;
-    
-    btnAnkiConnect.disabled = true;
-    btnAnkiConnect.classList.add('loading');
-    
-    try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'sendToAnki',
-        data: extractedData,
-        deckName: getDeckName(),
-        type: 'all'
-      });
-      
-      if (response && response.success) {
-        btnAnkiConnect.classList.add('success');
-        let message = `Sent ${response.count} cards to Anki!`;
-        if (response.skipped > 0) {
-          message += ` Skipped ${response.skipped} duplicates.`;
-        }
-        showMessage(message, 'success');
-        setTimeout(() => btnAnkiConnect.classList.remove('success'), 2000);
-      } else {
-        btnAnkiConnect.classList.add('error');
-        showMessage(response?.error || 'Failed to send to Anki', 'error');
-        setTimeout(() => btnAnkiConnect.classList.remove('error'), 2000);
-      }
-    } catch (error) {
-      btnAnkiConnect.classList.add('error');
-      showMessage(error.message, 'error');
-      setTimeout(() => btnAnkiConnect.classList.remove('error'), 2000);
-    } finally {
-      btnAnkiConnect.disabled = false;
-      btnAnkiConnect.classList.remove('loading');
-      updateButtonStates();
-    }
+  const name = getDeckName();
+  const hasQuizzes = extractedData.quizzes.length > 0;
+  const hasFlashcards = extractedData.flashcards.length > 0;
+  elements.deckPreview.classList.remove("hidden");
+  elements.previewQuiz.classList.toggle("hidden", !hasQuizzes);
+  elements.previewFlashcard.classList.toggle("hidden", !hasFlashcards);
+  elements.previewQuiz.querySelector(".preview-name").textContent = name;
+  elements.previewFlashcard.querySelector(".preview-name").textContent = name;
+}
+
+function updateActionStates() {
+  const hasExportData = hasContent(extractedData);
+  const contentReady = hasExportData && !scanning && !operationInProgress;
+  elements.deckName.disabled = !hasExportData || scanning || operationInProgress;
+  elements.anki.disabled = !contentReady || !ankiConnected;
+  elements.apkg.disabled = !contentReady;
+  elements.csvAll.disabled = !contentReady;
+  elements.csvToggle.disabled = !contentReady;
+  elements.csvQuizzes.disabled = !contentReady || !extractedData?.quizzes.length;
+  elements.csvFlashcards.disabled = !contentReady || !extractedData?.flashcards.length;
+  elements.csvHeaderless.disabled = !contentReady;
+  elements.csvQuizFlashcards.disabled = !contentReady || !extractedData?.quizzes.length;
+  elements.ankiDetail.textContent = ankiConnected
+    ? "Direct through AnkiConnect"
+    : "Open Anki to enable";
+}
+
+async function sendToAnki() {
+  const response = await chrome.runtime.sendMessage({
+    target: MESSAGE_TARGETS.BACKGROUND,
+    action: ACTIONS.SEND_TO_ANKI,
+    data: extractedData,
+    deckName: getDeckName(),
+    type: EXPORT_TYPES.ALL
   });
 
-  // Download APKG
-  btnApkg.addEventListener('click', async () => {
-    if (!extractedData) return;
-    
-    btnApkg.disabled = true;
-    btnApkg.classList.add('loading');
-    
-    try {
-      const deckName = getDeckName();
-      
-      const response = await chrome.runtime.sendMessage({
-        action: 'generateApkg',
-        data: extractedData,
-        deckName: deckName
-      });
-      
-      if (response && response.success) {
-        btnApkg.classList.add('success');
-        showMessage(`Downloaded ${deckName}.apkg`, 'success');
-        setTimeout(() => btnApkg.classList.remove('success'), 2000);
-      } else {
-        btnApkg.classList.add('error');
-        showMessage(response?.error || 'Failed to generate APKG', 'error');
-        setTimeout(() => btnApkg.classList.remove('error'), 2000);
-      }
-    } catch (error) {
-      console.error('[NotebookLM2Anki] APKG error:', error);
-      btnApkg.classList.add('error');
-      showMessage(error.message, 'error');
-      setTimeout(() => btnApkg.classList.remove('error'), 2000);
-    } finally {
-      btnApkg.disabled = false;
-      btnApkg.classList.remove('loading');
-      updateButtonStates();
+  if (!response?.success) {
+    if (response?.count) {
+      throw new Error(`${formatCount(response.count, "card")} sent; ${response.failed || 1} failed`);
     }
-  });
-
-  // CSV Export Functions
-  function exportCSV(type, includeHeader = true) {
-    if (!extractedData) return;
-    
-    const deckName = getDeckName().replace(/[^a-z0-9]/gi, '_');
-    
-    if (type === 'quizzes' || type === 'all') {
-      if (extractedData.quizzes?.length > 0) {
-        const csv = quizzesToCSV(extractedData.quizzes, includeHeader);
-        downloadCSV(csv, `${deckName}-quizzes.csv`);
-      }
-    }
-    
-    if (type === 'flashcards' || type === 'all') {
-      if (extractedData.flashcards?.length > 0) {
-        const csv = flashcardsToCSV(extractedData.flashcards, includeHeader);
-        downloadCSV(csv, `${deckName}-flashcards.csv`);
-      }
-    }
-    
-    showMessage('CSV downloaded!', 'success');
+    throw new Error(response?.error || "Anki did not accept the export");
   }
 
-  function quizzesToCSV(quizzes, includeHeader) {
-    const headers = ['Question', 'Hint', 'Option1', 'Flag1', 'Rationale1', 'Option2', 'Flag2', 'Rationale2', 'Option3', 'Flag3', 'Rationale3', 'Option4', 'Flag4', 'Rationale4'];
-    let csv = includeHeader ? headers.join(',') + '\n' : '';
-    
-    for (const quiz of quizzes) {
-      const options = quiz.options || [];
-      const row = [
-        escapeCSV(quiz.question),
-        escapeCSV(quiz.hint || ''),
-        escapeCSV(options[0]?.text || ''),
-        escapeCSV(options[0]?.isCorrect ? 'True' : 'False'),
-        escapeCSV(options[0]?.rationale || ''),
-        escapeCSV(options[1]?.text || ''),
-        escapeCSV(options[1]?.isCorrect ? 'True' : 'False'),
-        escapeCSV(options[1]?.rationale || ''),
-        escapeCSV(options[2]?.text || ''),
-        escapeCSV(options[2]?.isCorrect ? 'True' : 'False'),
-        escapeCSV(options[2]?.rationale || ''),
-        escapeCSV(options[3]?.text || ''),
-        escapeCSV(options[3]?.isCorrect ? 'True' : 'False'),
-        escapeCSV(options[3]?.rationale || '')
-      ];
-      csv += row.join(',') + '\n';
-    }
-    
-    return csv;
+  if (response.count === 0 && response.skipped > 0) {
+    return `${formatCount(response.skipped, "card")} already existed in Anki`;
   }
 
-  function flashcardsToCSV(flashcards, includeHeader) {
-    let csv = includeHeader ? 'Front,Back\n' : '';
-    
-    for (const card of flashcards) {
-      csv += `${escapeCSV(card.front)},${escapeCSV(card.back)}\n`;
-    }
-    
-    return csv;
+  let message = `${formatCount(response.count, "card")} sent to Anki`;
+  if (response.skipped > 0) message += ` · ${response.skipped} already existed`;
+  return message;
+}
+
+async function downloadApkg() {
+  const response = await chrome.runtime.sendMessage({
+    target: MESSAGE_TARGETS.BACKGROUND,
+    action: ACTIONS.GENERATE_APKG,
+    data: extractedData,
+    deckName: getDeckName()
+  });
+  if (!response?.success) throw new Error(response?.error || "The APKG file could not be created");
+  return `${formatCount(response.count, "card")} saved in ${response.filename}`;
+}
+
+async function runExport(button, operation) {
+  if (operationInProgress || button.disabled) return;
+  operationInProgress = true;
+  button.classList.add("is-loading");
+  button.setAttribute("aria-busy", "true");
+  updateActionStates();
+
+  try {
+    const successMessage = await operation();
+    button.classList.add("is-success");
+    showMessage(successMessage, "success");
+  } catch (error) {
+    button.classList.add("is-error");
+    showMessage(formatError(error), "error");
+  } finally {
+    operationInProgress = false;
+    button.classList.remove("is-loading");
+    button.removeAttribute("aria-busy");
+    setTimeout(() => button.classList.remove("is-success", "is-error"), 2200);
+    updateActionStates();
   }
+}
 
-  function quizToFlashcardCSV(quizzes, includeHeader) {
-    let csv = includeHeader ? 'Front,Back\n' : '';
-    
-    for (const quiz of quizzes) {
-      const question = quiz.question || '';
-      const options = quiz.options || [];
-      const correctOption = options.find(opt => opt.isCorrect);
-      const answer = correctOption ? correctOption.text : '';
-      
-      if (question && answer) {
-        csv += `${escapeCSV(question)},${escapeCSV(answer)}\n`;
-      }
-    }
-    
-    return csv;
+function runCsvExport(exporter) {
+  if (operationInProgress || !hasContent(extractedData)) return;
+  try {
+    const result = exporter();
+    const fileCount = result.files?.length || 1;
+    showMessage(`${formatCount(result.count, "card")} saved in ${formatCount(fileCount, "CSV file")}`, "success");
+  } catch (error) {
+    showMessage(formatError(error), "error");
   }
+}
 
-  function exportQuizAsFlashcard() {
-    if (!extractedData) return;
-    
-    const deckName = getDeckName().replace(/[^a-z0-9]/gi, '_');
-    
-    if (extractedData.quizzes?.length > 0) {
-      const csv = quizToFlashcardCSV(extractedData.quizzes, true);
-      downloadCSV(csv, `${deckName}-quiz-as-flashcard.csv`);
-      showMessage('Quiz exported as flashcards!', 'success');
-    } else {
-      showMessage('No quizzes found to convert', 'error');
-    }
+function setConnectionState(state, label) {
+  elements.status.className = `connection is-${state}`;
+  elements.statusText.textContent = label;
+  elements.status.setAttribute(
+    "aria-label",
+    state === "checking" ? "Checking Anki connection" : `${label}. Check again`
+  );
+}
+
+function toggleCsvMenu(open) {
+  if (elements.csvToggle.disabled && open) return;
+  elements.csvMenu.classList.toggle("hidden", !open);
+  elements.csvToggle.setAttribute("aria-expanded", String(open));
+}
+
+function firstEnabledMenuItem() {
+  return elements.csvMenu.querySelector("button:not(:disabled)");
+}
+
+function showMessage(text, type) {
+  clearTimeout(messageTimeout);
+  elements.message.textContent = text;
+  elements.message.className = `message is-${type}`;
+  elements.message.setAttribute("role", type === "error" ? "alert" : "status");
+  messageTimeout = setTimeout(() => elements.message.classList.add("hidden"), 6500);
+}
+
+function getDeckName() {
+  return sanitizeDeckName(elements.deckName.value || extractedData?.title, "NotebookLM Export");
+}
+
+function getFilenameBase() {
+  return sanitizeFilename(getDeckName());
+}
+
+function hasContent(data) {
+  return Boolean(data && (data.quizzes?.length || data.flashcards?.length));
+}
+
+function isNotebookLMUrl(value) {
+  try {
+    return new URL(value).hostname === "notebooklm.google.com";
+  } catch {
+    return false;
   }
+}
 
-  function escapeCSV(value) {
-    if (!value) return '""';
-    const escaped = String(value).replace(/"/g, '""');
-    return `"${escaped}"`;
+function deduplicate(items, createKey) {
+  const seen = new Set();
+  return items.filter(item => {
+    const key = createKey(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function formatCount(count, noun) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function formatError(error) {
+  const message = error instanceof Error ? error.message : String(error || "Export failed");
+  if (/fetch|network|connect|anki offline|failed to fetch/i.test(message)) {
+    return "Anki is unavailable. Open Anki with AnkiConnect, then try again.";
   }
-
-  function downloadCSV(content, filename) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  // CSV button event listeners
-  btnCsvAll.addEventListener('click', () => exportCSV('all', true));
-  
-  btnCsvDropdown.addEventListener('click', (e) => {
-    e.stopPropagation();
-    csvMenu.classList.toggle('hidden');
-    btnCsvDropdown.classList.toggle('active');
-  });
-  
-  btnCsvQuizzes.addEventListener('click', () => {
-    exportCSV('quizzes', true);
-    csvMenu.classList.add('hidden');
-  });
-  
-  btnCsvFlashcards.addEventListener('click', () => {
-    exportCSV('flashcards', true);
-    csvMenu.classList.add('hidden');
-  });
-  
-  btnCsvHeaderless.addEventListener('click', () => {
-    exportCSV('all', false);
-    csvMenu.classList.add('hidden');
-  });
-
-  btnCsvQuizAsFlashcard.addEventListener('click', () => {
-    exportQuizAsFlashcard();
-    csvMenu.classList.add('hidden');
-  });
-
-  // Close dropdown when clicking outside
-  document.addEventListener('click', () => {
-    csvMenu.classList.add('hidden');
-    btnCsvDropdown.classList.remove('active');
-  });
-});
+  return message.replace(/[.!]+$/, "");
+}

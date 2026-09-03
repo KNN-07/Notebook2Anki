@@ -5,7 +5,6 @@
   "description": "Export NotebookLM Quizzes & Flashcards to Anki - via AnkiConnect, .apkg, or CSV",
   "permissions": [
     "activeTab",
-    "storage",
     "scripting",
     "offscreen"
   ],
@@ -32,16 +31,10 @@
         "https://notebooklm.google.com/*",
         "https://*.usercontent.goog/*"
       ],
-      "js": ["src/content/content.js"],
+      "js": ["src/lib/extractor.js", "src/content/content.js"],
       "all_frames": true,
       "match_origin_as_fallback": true,
       "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["vendor/*", "src/lib/*"],
-      "matches": ["https://notebooklm.google.com/*", "https://*.usercontent.goog/*"]
     }
   ],
   "icons": {

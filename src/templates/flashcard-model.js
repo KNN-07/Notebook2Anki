@@ -1,109 +1,144 @@
-// NotebookLM2Anki - Flashcard Card Template
-// Simple Front/Back template for flashcards
+// NotebookLM2Anki - Flashcard note type
 
 export const FLASHCARD_MODEL_ID = 1609234567891;
 export const FLASHCARD_MODEL_NAME = "NotebookLM Flashcard";
+export const FLASHCARD_FIELDS = Object.freeze([
+  Object.freeze({ name: "Front" }),
+  Object.freeze({ name: "Back" })
+]);
 
-export const FLASHCARD_FIELDS = [
-  { name: "Front" },
-  { name: "Back" }
-];
+export const FLASHCARD_STYLING = `
+html { overflow-x: hidden; }
+body {
+  margin: 0;
+  background: #171918;
+  color: #eef2ed;
+  font-family: "Segoe UI Variable", "Aptos", "Segoe UI", system-ui, sans-serif;
+}
+.card {
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 28px 18px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  background: radial-gradient(circle at 50% -20%, rgba(168, 199, 250, .12), transparent 44%), #171918;
+  font-size: 18px;
+  line-height: 1.65;
+  text-align: left;
+}
+.flashcard-shell {
+  width: min(100%, 640px);
+  padding: clamp(24px, 5vw, 42px);
+  box-sizing: border-box;
+  border: 1px solid #3b423c;
+  border-radius: 18px 18px 18px 6px;
+  background: #1f2320;
+  box-shadow: 0 18px 50px rgba(7, 10, 8, .3);
+}
+.card-label {
+  margin-bottom: 17px;
+  color: #8e998f;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.front-section {
+  color: #f5f7f4;
+  font-size: clamp(1.25rem, 4vw, 1.55rem);
+  font-weight: 620;
+  line-height: 1.45;
+  letter-spacing: -.018em;
+  text-wrap: pretty;
+}
+.answer-divider {
+  height: 1px;
+  margin: 28px 0 25px;
+  background: #3b423c;
+}
+.back-section {
+  color: #c7dcff;
+  font-size: clamp(1.08rem, 3.3vw, 1.3rem);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+.front-repeat {
+  color: #aeb7af;
+  font-size: .96rem;
+  line-height: 1.55;
+}
+.latex-snippet,
+code {
+  padding: .12em .36em;
+  border: 1px solid #454d46;
+  border-radius: 5px;
+  background: #292e2a;
+  color: #f0cf83;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: .9em;
+}
+img { max-width: 100%; height: auto; border-radius: 10px; }
+a { color: #a8c7fa; text-underline-offset: .2em; }
+@media (max-width: 520px) {
+  .card { padding: 12px; }
+  .flashcard-shell { padding: 24px 20px; border-radius: 14px 14px 14px 5px; }
+}
+`;
 
-export const FLASHCARD_STYLING = `html { overflow-y: scroll; overflow-x: hidden; }
-body { margin: 0; padding: 0; width: 100%; background-color: transparent; font-family: 'Roboto', 'Segoe UI', sans-serif; color: #e3e3e3; }
-.card { font-size: 18px; line-height: 1.7; text-align: center; background-color: transparent; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px 20px; box-sizing: border-box; }
-.flashcard-container { max-width: 600px; width: 100%; background-color: #2d2d2d; border: 1px solid #444746; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-.front-section { font-size: 1.4rem; font-weight: 500; color: #ffffff; line-height: 1.6; }
-.divider { display: flex; align-items: center; margin: 28px 0; gap: 16px; }
-.divider-line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #444746, transparent); }
-.divider-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 2px; color: #6dd58c; text-transform: uppercase; padding: 4px 12px; background-color: rgba(109,213,140,0.1); border-radius: 4px; }
-.back-section { font-size: 1.25rem; color: #a8c7fa; line-height: 1.6; }
-.question-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 2px; color: #888; text-transform: uppercase; margin-bottom: 12px; }
-.front-repeat { font-size: 1rem; color: #888; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #3a3a3a; }
-.latex-snippet { background-color: #383838; color: #e6b455; padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.95em; border: 1px solid #444; }
-code { background-color: #383838; color: #e6b455; padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; }
-@media (max-width: 600px) { .flashcard-container { padding: 24px; margin: 0 10px; } .front-section { font-size: 1.2rem; } .back-section { font-size: 1.1rem; } }`;
-
-export const FLASHCARD_FRONT_TEMPLATE = `<div class="card">
-  <div class="flashcard-container">
-    <div class="front-section" id="front-content">{{Front}}</div>
-  </div>
+export const FLASHCARD_FRONT_TEMPLATE = `<div class="flashcard-shell">
+  <div class="card-label">Question</div>
+  <div class="front-section" id="front-content">{{Front}}</div>
 </div>
-<script>
-(function() {
-    function cleanMath(str) {
-        if (!str) return "";
-        let s = str.replace(/\\$\\$(.*?)\\$\\$/gs, '\\\\[$1\\\\]');
-        s = s.replace(/\\$((?:[^$]}\\\\\\$)+?)\\$/g, '\\\\($1\\\\)');
-        s = s.replace(/\\\`([^\\\`]+)\\\`/g, '<code class="latex-snippet">$1</code>');
-        return s;
-    }
-    function triggerMath(element) {
-        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
-            MathJax.typesetPromise([element]).catch(err => {});
-        } else if (typeof MathJax !== 'undefined' && MathJax.Hub) {
-            MathJax.Hub.Queue(["Typeset", MathJax.Hub, element]);
-        }
-    }
-    try {
-        const el = document.getElementById('front-content');
-        el.innerHTML = cleanMath(el.innerHTML);
-        setTimeout(() => triggerMath(document.body), 100);
-    } catch (e) {}
-})();
-<\\/script>`;
+${createMathScript(["front-content"])}`;
 
-export const FLASHCARD_BACK_TEMPLATE = `<div class="card">
-  <div class="flashcard-container">
-    <div class="front-repeat" id="back-front">{{Front}}</div>
-    <div class="divider">
-      <span class="divider-line"></span>
-      <span class="divider-label">Answer</span>
-      <span class="divider-line"></span>
-    </div>
-    <div class="back-section" id="back-content">{{Back}}</div>
-  </div>
+export const FLASHCARD_BACK_TEMPLATE = `<div class="flashcard-shell">
+  <div class="card-label">Question</div>
+  <div class="front-repeat" id="back-front">{{Front}}</div>
+  <div class="answer-divider" aria-hidden="true"></div>
+  <div class="card-label">Answer</div>
+  <div class="back-section" id="back-content">{{Back}}</div>
 </div>
-<script>
-(function() {
-    function cleanMath(str) {
-        if (!str) return "";
-        let s = str.replace(/\\$\\$(.*?)\\$\\$/gs, '\\\\[$1\\\\]');
-        s = s.replace(/\\$((?:[^$]|\\\\\\$)+?)\\$/g, '\\\\($1\\\\)');
-        s = s.replace(/\\\`([^\\\`]+)\\\`/g, '<code class="latex-snippet">$1</code>');
-        return s;
-    }
-    function triggerMath(element) {
-        if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
-            MathJax.typesetPromise([element]).catch(err => {});
-        } else if (typeof MathJax !== 'undefined' && MathJax.Hub) {
-            MathJax.Hub.Queue(["Typeset", MathJax.Hub, element]);
-        }
-    }
-    try {
-        const front = document.getElementById('back-front');
-        const back = document.getElementById('back-content');
-        front.innerHTML = cleanMath(front.innerHTML);
-        back.innerHTML = cleanMath(back.innerHTML);
-        setTimeout(() => triggerMath(document.body), 100);
-    } catch (e) {}
-})();
-<\\/script>`;
+${createMathScript(["back-front", "back-content"])}`;
 
-// Export the complete model definition for genanki-js
 export function getFlashcardModel() {
   return {
     name: FLASHCARD_MODEL_NAME,
     id: FLASHCARD_MODEL_ID.toString(),
     flds: FLASHCARD_FIELDS,
     req: [[0, "all", [0]]],
-    tmpls: [
-      {
-        name: "Flashcard",
-        qfmt: FLASHCARD_FRONT_TEMPLATE,
-        afmt: FLASHCARD_BACK_TEMPLATE
-      }
-    ],
+    tmpls: [{
+      name: "Flashcard",
+      qfmt: FLASHCARD_FRONT_TEMPLATE,
+      afmt: FLASHCARD_BACK_TEMPLATE
+    }],
     css: FLASHCARD_STYLING
   };
+}
+
+function createMathScript(elementIds) {
+  return `<script>
+(function () {
+  function cleanMath(value) {
+    if (!value) return "";
+    return value
+      .replace(/\\$\\$(.*?)\\$\\$/gs, "\\\\[$1\\\\]")
+      .replace(/\\$((?:[^$]|\\\\\\$)+?)\\$/g, "\\\\($1\\\\)")
+      .replace(/\u0060([^\u0060]+)\u0060/g, '<code class="latex-snippet">$1</code>');
+  }
+  function typeset(elements) {
+    if (typeof MathJax === "undefined") return;
+    if (MathJax.typesetPromise) MathJax.typesetPromise(elements).catch(function () {});
+    else if (MathJax.Hub) MathJax.Hub.Queue(["Typeset", MathJax.Hub, document.body]);
+  }
+  var elements = ${JSON.stringify(elementIds)}.map(function (id) {
+    return document.getElementById(id);
+  }).filter(Boolean);
+  elements.forEach(function (element) {
+    element.innerHTML = cleanMath(element.innerHTML);
+  });
+  setTimeout(function () { typeset(elements); }, 80);
+})();
+<\\/script>`;
 }

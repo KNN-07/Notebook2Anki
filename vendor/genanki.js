@@ -359,7 +359,7 @@ class Package {
 
         zip.file('media', JSON.stringify(media_info))
 
-        zip.generateAsync({ type: "blob", mimeType: "application/apkg" }).then(function (content) {
+        return zip.generateAsync({ type: "blob", mimeType: "application/apkg" }).then(function (content) {
             // see FileSaver.js
             saveAs(content, filename);
         });
