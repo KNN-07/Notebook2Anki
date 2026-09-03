@@ -38,7 +38,7 @@ body {
   box-shadow: 0 18px 50px rgba(7, 10, 8, .3);
 }
 .card-label {
-  margin-bottom: 17px;
+  margin-bottom: 16px;
   color: #8e998f;
   font-size: 11px;
   font-weight: 700;
@@ -46,28 +46,34 @@ body {
   text-transform: uppercase;
 }
 .front-section {
+  min-width: 0;
   color: #f5f7f4;
   font-size: clamp(1.25rem, 4vw, 1.55rem);
   font-weight: 620;
   line-height: 1.45;
   letter-spacing: -.018em;
+  overflow-wrap: anywhere;
   text-wrap: pretty;
 }
 .answer-divider {
   height: 1px;
-  margin: 28px 0 25px;
+  margin: 24px 0 16px;
   background: #3b423c;
 }
 .back-section {
+  min-width: 0;
   color: #c7dcff;
   font-size: clamp(1.08rem, 3.3vw, 1.3rem);
   line-height: 1.6;
+  overflow-wrap: anywhere;
   text-wrap: pretty;
 }
 .front-repeat {
+  min-width: 0;
   color: #aeb7af;
   font-size: .96rem;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 .latex-snippet,
 code {
@@ -79,7 +85,13 @@ code {
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: .9em;
 }
-img { max-width: 100%; height: auto; border-radius: 10px; }
+.front-section > :first-child,
+.front-repeat > :first-child,
+.back-section > :first-child { margin-top: 0; }
+.front-section > :last-child,
+.front-repeat > :last-child,
+.back-section > :last-child { margin-bottom: 0; }
+img { display: block; max-width: 100%; height: auto; border-radius: 10px; }
 a { color: #a8c7fa; text-underline-offset: .2em; }
 @media (max-width: 520px) {
   .card { padding: 12px; }

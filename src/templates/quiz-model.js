@@ -40,25 +40,26 @@ body {
   width: min(100%, 680px);
 }
 .question-text {
-  margin-bottom: 22px;
+  margin-bottom: 24px;
   color: #f5f7f4;
   font-size: clamp(1.3rem, 3vw, 1.7rem);
   font-weight: 650;
   line-height: 1.38;
   letter-spacing: -.022em;
+  overflow-wrap: anywhere;
   text-wrap: pretty;
 }
-.hint-container { margin-bottom: 18px; }
+.hint-container { margin-bottom: 16px; }
 .hint-button {
-  min-height: 34px;
-  padding: 0 11px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 1px solid #414942;
   border-radius: 8px;
   background: #202421;
   color: #b9c6bb;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font: 650 .78rem/1 inherit;
   cursor: pointer;
   transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 120ms ease;
@@ -77,21 +78,23 @@ body {
   stroke-linejoin: round;
 }
 .hint-text {
-  margin-top: 9px;
-  padding: 12px 13px;
+  margin-top: 8px;
+  padding: 12px 14px;
   border: 1px solid #3a423b;
   border-radius: 8px;
   background: #1d211e;
   color: #c7cec8;
   font-size: .9rem;
+  overflow-wrap: anywhere;
 }
 .options-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 .option-button {
   width: 100%;
-  padding: 15px 16px;
+  padding: 16px;
+  box-sizing: border-box;
   border: 1px solid #3a413b;
   border-radius: 12px 12px 12px 4px;
   background: #202421;
@@ -106,13 +109,13 @@ body {
 .option-button:active { transform: translateY(1px); }
 .option-content {
   display: grid;
-  grid-template-columns: 27px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
 }
 .option-letter {
-  width: 25px;
-  height: 25px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border: 1px solid #4a534b;
@@ -122,7 +125,12 @@ body {
   font-weight: 750;
   line-height: 1;
 }
-.option-text { padding-top: 1px; font-size: 1rem; text-wrap: pretty; }
+.option-text {
+  padding-top: 2px;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
 .option-button.is-correct {
   border-color: rgba(155, 211, 168, .7);
   background: rgba(155, 211, 168, .08);
@@ -142,8 +150,8 @@ body {
 .option-button.is-dimmed { opacity: .46; }
 .feedback {
   display: block;
-  margin-top: 12px;
-  padding-top: 11px;
+  margin: 12px 0 0 40px;
+  padding-top: 12px;
   border-top: 1px solid #3b423c;
 }
 .feedback-title {
@@ -155,17 +163,27 @@ body {
 }
 .is-correct .feedback-title { color: #aee0b9; }
 .is-wrong .feedback-title { color: #f4b9b3; }
-.rationale-text { display: block; color: #b6beb7; font-size: .88rem; line-height: 1.55; }
+.rationale-text {
+  display: block;
+  color: #b6beb7;
+  font-size: .88rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .quiz-layout.has-diagram {
   grid-template-columns: minmax(360px, 680px) minmax(300px, 620px);
   gap: clamp(24px, 4vw, 60px);
   align-items: start;
   justify-content: center;
+  justify-items: stretch;
 }
 .diagram-panel {
   position: sticky;
   top: 30px;
+  width: 100%;
+  min-width: 0;
   padding: 14px;
+  box-sizing: border-box;
   border: 1px solid #3a413b;
   border-radius: 14px;
   background: #1d211e;
@@ -192,12 +210,13 @@ a { color: #a8c7fa; text-underline-offset: .2em; }
 .card.back .option-button { pointer-events: none; }
 @media (max-width: 920px) {
   .quiz-layout.has-diagram { grid-template-columns: minmax(0, 680px); }
-  .diagram-panel { position: static; grid-row: 1; }
+  .diagram-panel { position: static; grid-row: auto; order: -1; }
   .diagram-panel img, .diagram-panel svg { max-height: 38vh; }
 }
 @media (max-width: 520px) {
   .quiz-layout { padding: 20px 12px 30px; }
-  .option-button { padding: 13px 12px; }
+  .hint-button { min-height: 44px; }
+  .option-button { padding: 12px; }
 }
 `;
 

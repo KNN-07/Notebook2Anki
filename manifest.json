@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Notebook2Anki",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Export Gemini Notebook quizzes and flashcards to Anki via AnkiConnect, APKG, or CSV",
   "permissions": [
     "activeTab",
